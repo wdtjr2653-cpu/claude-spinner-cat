@@ -1,0 +1,6 @@
+{
+  "name": "cat-mods",
+  "description": "Claude Code 터미널에 사는 고양이 Mod 모음",
+  "owner": { "name": "이정석" },
+  "plugins": [{ "name": "spinner-cat", "source": "./" }]
+}
