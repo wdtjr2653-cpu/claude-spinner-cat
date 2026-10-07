@@ -27,28 +27,42 @@ function startWork($: EngineInterface, timers: Timers) {
   timers.work = $.clock.every(TICK_MS, () => void update($, tick, n => n + 1))
 }
 
-// 동작 하나를 한 번 재생하고 멈춘 그림으로 돌아간 뒤, 잠시 가만히 있다가 다음 잔동작을 한다
+// 입력창에 글이 있는 동안엔 고양이가 가만히 있는다: 그림이 바뀔 때마다 입력 커서가 깜빡인다
+async function typing($: EngineInterface) {
+  return (await $.prompt.read()).text !== ''
+}
+
+// 동작 하나를 한 번 재생하고 멈춘 그림으로 돌아간 뒤, 잠시 가만히 있다가 다음 잔동작을 한다.
+// 도중에 글을 쓰기 시작하면 바로 멈춘 그림으로
 function play($: EngineInterface, timers: Timers, phase: Phase, clip: number) {
   timers.beat?.cancel()
   timers.next?.cancel()
   void update($, idle, () => ({ phase, clip, step: 0 }))
   const len = clipLength(phase, clip)
   const beat = $.clock.every(TICK_MS, () => {
-    void update($, idle, r => ({ ...r, step: r.step + 1 })).then(r => {
+    void typing($).then(t => update($, idle, r => ({ ...r, step: t ? len : r.step + 1 }))).then(r => {
       if (r.step < len || timers.beat !== beat) return
       beat.cancel()
       timers.beat = undefined
-      timers.next = $.clock.after(GAP_MS[phase], () => play($, timers, phase, nextClip(phase, clip)))
+      timers.next = $.clock.after(GAP_MS[phase], () => void fidget($, timers, phase, nextClip(phase, clip)))
     })
   })
   timers.beat = beat
 }
 
+// 글을 쓰는 중이면 이번 동작은 건너뛰고(상태가 바뀌었으면 멈춘 그림만 한 번) 다음 차례를 기다린다
+async function fidget($: EngineInterface, timers: Timers, phase: Phase, clip: number) {
+  if (!(await typing($))) return play($, timers, phase, clip)
+  const s = await read($, idle)
+  if (s.phase !== phase || s.step < clipLength(s.phase, s.clip)) await update($, idle, () => ({ phase, clip, step: clipLength(phase, clip) }))
+  timers.next = $.clock.after(GAP_MS[phase], () => void fidget($, timers, phase, nextClip(phase, clip)))
+}
+
 // 턴이 끝났거나 세션이 막 열렸을 때: 식빵 굽기, 3분 뒤 잠
 function goIdle($: EngineInterface, timers: Timers) {
   stopAll(timers)
-  play($, timers, 'rest', 0)
-  timers.nap = $.clock.after(SLEEP_AFTER_MS, () => play($, timers, 'sleep', 0))
+  void fidget($, timers, 'rest', 0)
+  timers.nap = $.clock.after(SLEEP_AFTER_MS, () => void fidget($, timers, 'sleep', 0))
 }
 
 export const register: Register = on => {

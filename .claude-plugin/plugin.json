@@ -1,6 +1,6 @@
 {
   "name": "spinner-cat",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "작업 중 표시 줄(✻ Cooking…)을 상태별로 움직이는 ASCII 고양이로 바꾸고, 쉬는 동안엔 입력창 위에서 식빵을 굽다가 잠든다",
   "author": { "name": "이정석" },
   "repository": "https://github.com/wdtjr2653-cpu/claude-spinner-cat",

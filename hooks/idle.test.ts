@@ -1,13 +1,21 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+import type { On } from 'claude-code'
 
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 80, scroll: { offset: 0, bodyRows: 20 }, view: {} }
 
-test('쉴 때: 하품하고 엎드려 멈췄다가, 5초마다 잔동작을 하고 다시 멈추고, 3분 뒤 잠들어서도 5초마다 잔동작', async ($, on) => {
+// 세션을 열고 입력창 위 띠를 띄운다. draft() 가 입력창에 쓰여 있는 글
+async function start($: Engine, on: On, draft: () => string) {
   const clock = mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('prompt.read', () => ({ value: { text: draft(), cursor: draft().length } }))
   await $.session.start({ cwd: '.', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount({ plugin: 'spinner-cat', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-  const drawn = async () => JSON.stringify(await band.drawn())
+  return { clock, drawn: async () => JSON.stringify(await band.drawn()) }
+}
+
+test('쉴 때: 하품하고 엎드려 멈췄다가, 5초마다 잔동작을 하고 다시 멈추고, 3분 뒤 잠들어서도 5초마다 잔동작', async ($, on) => {
+  const { clock, drawn } = await start($, on, () => '')
 
   expect(await drawn()).toContain('-o-')  // 하품부터(3초)
   await clock.advance(4_000)
@@ -26,4 +34,35 @@ test('쉴 때: 하품하고 엎드려 멈췄다가, 5초마다 잔동작을 하�
   expect(await drawn()).not.toBe(asleep)
   await clock.advance(4_000)
   expect(await drawn()).toBe(asleep)      // 다시 멈춤
+})
+
+test('입력창에 글이 있으면 움직이지 않고, 지우면 다시 움직인다(그림이 바뀔 때마다 입력 커서가 깜빡여서)', async ($, on) => {
+  let draft = ''
+  const { clock, drawn } = await start($, on, () => draft)
+  await clock.advance(4_000)
+  const still = await drawn()
+  draft = '안녕'
+  for (let s = 0; s < 30; s++) {         // 잔동작 차례가 여러 번 와도 그대로
+    await clock.advance(1_000)
+    expect(await drawn()).toBe(still)
+  }
+  draft = ''
+  let moved = false
+  for (let s = 0; s < 12 && !moved; s++) {
+    await clock.advance(1_000)
+    moved = (await drawn()) !== still
+  }
+  expect(moved).toBe(true)
+})
+
+test('잔동작 도중에 글을 쓰기 시작하면 바로 멈춘 그림으로 돌아간다', async ($, on) => {
+  let draft = ''
+  const { clock, drawn } = await start($, on, () => draft)
+  await clock.advance(4_000)
+  const still = await drawn()
+  await clock.advance(5_000)              // 첫 잔동작(꼬리 살랑, 8~10초) 중
+  expect(await drawn()).not.toBe(still)
+  draft = 'ㅎ'
+  await clock.advance(300)                // 다음 박자(0.25초) 안에
+  expect(await drawn()).toBe(still)
 })
